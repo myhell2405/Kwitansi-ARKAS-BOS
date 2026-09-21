@@ -1,0 +1,45 @@
+{
+  "name": "arkas-bos-kwitansi",
+  "version": "1.0.0",
+  "author": "SDN 07 Sitapung",
+  "private": true,
+  "description": "Aplikasi desktop kwitansi ARKAS BOS",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "desktop": "electron .",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "electron": "^37.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "id.sekolah.kwitansiarkasbos",
+    "productName": "Kwitansi ARKAS BOS",
+    "compression": "store",
+    "files": [
+      "main.js",
+      "server.js",
+      "index.html",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "useZip": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kwitansi ARKAS BOS"
+    }
+  }
+}

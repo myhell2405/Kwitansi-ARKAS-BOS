@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Kwitansi & Daftar Pembayaran ARKAS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Tinos:ital,wght@0,400;0,700;1,400&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* Standard Serif Font for Exact Print Voucher Look */
+        .print-document {
+            font-family: 'Tinos', 'Times New Roman', Times, serif;
+            color: #000;
+            background: #fff;
+            width: 210mm; /* A4 width */
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 10mm 12mm;
+            box-sizing: border-box;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Exact Table Borders for Print Preview */
+        .excel-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .excel-table th, .excel-table td {
+            border: 1px solid #000;
+            padding: 4px 6px;
+            font-size: 12px;
+        }
+
+        .border-box {
+            border: 1px solid #000;
+        }
+
+        .border-box-double {
+            border: 2px solid #000;
+        }
+
+        /* Print Media Styling for Pixel-Perfect Output */
+        @media print {
+            body {
+                background: #fff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-document {
+                box-shadow: none !important;
+                margin: 0 !important;
+                width: 100% !important;
+                padding: 0 !important;
+            }
+            .receipt-page-block {
+                page-break-after: always !important;
+                break-after: page !important;
+                padding-bottom: 5mm;
+            }
+            .receipt-page-block:last-child {
+                page-break-after: avoid !important;
+                break-after: avoid !important;
+            }
+            @page {
+                size: A4 portrait;
+                margin: 8mm;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-indigo-700 text-white shadow-md no-print">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-white/20 p-2 rounded-lg">
+                    <i class="fa-solid fa-file-invoice-dollar text-2xl text-yellow-300"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">Sistem Kwitansi ARKAS BOS</h1>
+                    <p class="text-xs text-indigo-200">SDN 07 Sitapung - Cetak Format Presisi Excel</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <button onclick="openSettingsModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition flex items-center gap-1.5 border border-indigo-400">
+                    <i class="fa-solid fa-sliders text-xs"></i> Pengaturan
+                </button>
+                <button onclick="createNewReceipt()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-plus text-xs"></i> Kwitansi Baru
+                </button>
+                <button onclick="triggerPrint('single')" class="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-gray-900 rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-print"></i> Cetak Kwitansi Ini
+                </button>
+                <button onclick="triggerPrint('all')" class="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-gray-950 rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow border border-yellow-600">
+                    <i class="fa-solid fa-copy"></i> Cetak Semua (1 PDF)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT PANEL: FORM & HISTORY (NO-PRINT) -->
+        <div class="lg:col-span-5 flex flex-col gap-4 no-print">
+
+            <!-- HISTORY / LIST SELECTOR & PRINT MODE FILTER -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-gray-800 flex items-center gap-2 text-sm">
+                        <i class="fa-solid fa-list-check text-indigo-600"></i> Daftar Transaksi Disimpan
+                    </h2>
+                    <span id="receipt-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-semibold">0 Data</span>
+                </div>
+
+                <!-- Filter Tahun & Bulan -->
+                <div class="grid grid-cols-2 gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                    <div>
+                        <label for="year-filter" class="text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                            <i class="fa-solid fa-calendar-days text-indigo-500"></i> Filter Tahun:
+                        </label>
+                        <select id="year-filter" onchange="renderHistoryList(); renderPrintPreview();" class="w-full p-1 border border-gray-300 rounded text-xs bg-white font-medium focus:ring-1 focus:ring-indigo-500">
+                            <option value="all">Semua Tahun</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="month-filter" class="text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                            <i class="fa-solid fa-filter text-indigo-500"></i> Filter Bulan:
+                        </label>
+                        <select id="month-filter" onchange="renderHistoryList(); renderPrintPreview();" class="w-full p-1 border border-gray-300 rounded text-xs bg-white font-medium focus:ring-1 focus:ring-indigo-500">
+                            <option value="all">Semua Bulan</option>
+                            <option value="Januari">Januari</option>
+                            <option value="Februari">Februari</option>
+                            <option value="Maret">Maret</option>
+                            <option value="April">April</option>
+                            <option value="Mei">Mei</option>
+                            <option value="Juni">Juni</option>
+                            <option value="Juli">Juli</option>
+                            <option value="Agustus">Agustus</option>
+                            <option value="September">September</option>
+                            <option value="Oktober">Oktober</option>
+                            <option value="November">November</option>
+                            <option value="Desember">Desember</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Mode Display Toggle -->
+                <div class="flex gap-2 items-center bg-gray-100 p-1 rounded-lg text-xs font-medium">
+                    <button id="tab-btn-single" onclick="setPreviewMode('single')" class="flex-1 py-1 px-2 rounded-md bg-white shadow-sm text-indigo-700 font-bold transition">
+                        Pratinjau Satuan
+                    </button>
+                    <button id="tab-btn-all" onclick="setPreviewMode('all')" class="flex-1 py-1 px-2 rounded-md text-gray-600 hover:text-gray-900 transition">
+                        Pratinjau Semua Transaksi
+                    </button>
+                </div>
+
+                <div id="history-list" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    <!-- Dynamic List of Receipts -->
+                </div>
+            </div>
+
+            <!-- FORM INPUT DATA -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex-1 flex flex-col">
+                <div class="border-b border-gray-200 pb-3 mb-4 flex justify-between items-center">
+                    <h2 class="font-bold text-gray-800 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-pen-to-square text-indigo-600"></i> Form Input Data Kwitansi
+                    </h2>
+                    <button onclick="deleteCurrentReceipt()" class="text-xs text-red-600 hover:text-red-800 font-medium flex items-center gap-1">
+                        <i class="fa-solid fa-trash"></i> Hapus
+                    </button>
+                </div>
+
+                <form id="receipt-form" onsubmit="event.preventDefault();" class="space-y-4 text-xs">
+                    
+                    <!-- Form Header Info -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-medium text-gray-700 mb-1">No. Kwitansi</label>
+                            <input type="text" id="input-no" oninput="updateData()" placeholder="Contoh: 01/BOS/2026" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-700 mb-1">Kode Akun</label>
+                            <input type="text" id="input-kode-akun" oninput="updateData()" placeholder="Contoh: 5.1.02.01.01.0026" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-medium text-gray-700 mb-1">Tanggal Transaksi</label>
+                            <input type="date" id="input-tanggal" onchange="updateData()" oninput="updateData()" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 font-medium text-gray-800">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-700 mb-1">No. Folio Buku Kas</label>
+                            <input type="text" id="input-folio" oninput="updateData()" placeholder="Contoh: 11" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-medium text-gray-700 mb-1">Sudah Terima Dari</label>
+                        <input type="text" id="input-terima-dari" oninput="updateData()" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 font-semibold text-gray-800">
+                    </div>
+
+                    <div>
+                        <label class="block font-medium text-gray-700 mb-1">Sebab Dari (Uraian Kegiatan)</label>
+                        <textarea id="input-uraian" rows="2" oninput="updateData()" placeholder="Pembayaran Honorarium Pelatih Extrakurikuler..." class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500"></textarea>
+                    </div>
+
+                    <!-- TOGGLE DAFTAR PEMBAYARAN -->
+                    <div class="flex items-center gap-2 bg-indigo-50/70 p-2.5 rounded-lg border border-indigo-200">
+                        <input type="checkbox" id="input-tampilkan-daftar" onchange="updateData()" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer">
+                        <label for="input-tampilkan-daftar" class="font-semibold text-gray-800 cursor-pointer text-xs">Cetak Tabel Daftar Pembayaran (Lampiran)</label>
+                    </div>
+
+                    <!-- Dynamic Table Items -->
+                    <div class="border-t border-gray-200 pt-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="font-bold text-gray-800">Daftar Penerima (Rincian Tabel)</label>
+                            <button type="button" onclick="addRecipientRow()" class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-100 font-medium">
+                                <i class="fa-solid fa-plus"></i> Tambah Penerima
+                            </button>
+                        </div>
+                        <div class="space-y-2" id="recipient-input-container">
+                            <!-- Recipient row inputs generated via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Total Auto Display -->
+                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 flex justify-between items-center">
+                        <div>
+                            <div class="text-xs text-gray-500">Total Nominal:</div>
+                            <div id="form-total-display" class="text-lg font-bold text-indigo-700">Rp 0</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-gray-500">Terbilang (Otomatis):</div>
+                            <div id="form-terbilang-display" class="text-xs font-semibold italic text-gray-700 max-w-[200px] truncate">Nol Rupiah</div>
+                        </div>
+                    </div>
+
+                    <!-- Recipient Info for Bottom Signature -->
+                    <div class="grid grid-cols-2 gap-3 border-t border-gray-200 pt-3">
+                        <div>
+                            <label class="block font-medium text-gray-700 mb-1">Nama Terang (Yang Terima)</label>
+                            <input type="text" id="input-nama-terang" oninput="updateData()" placeholder="Contoh: Rida Malinda" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-700 mb-1">Alamat Terang</label>
+                            <input type="text" id="input-alamat-terang" oninput="updateData()" placeholder="Contoh: Sitapung" class="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="pt-2 flex gap-2">
+                        <button type="button" onclick="saveCurrentReceipt()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition text-center shadow">
+                            <i class="fa-solid fa-floppy-disk mr-1"></i> Simpan Data
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: EXACT PRINT REPLICA PREVIEW -->
+        <div class="lg:col-span-7 flex flex-col items-center">
+            
+            <!-- PRINT TIP BANNER -->
+            <div class="no-print bg-amber-50 border border-amber-300 text-amber-900 text-xs p-3 rounded-xl mb-3 w-full flex items-start gap-2 shadow-sm">
+                <i class="fa-solid fa-circle-info text-amber-600 text-base shrink-0 mt-0.5"></i>
+                <div>
+                    <span class="font-bold">Tips Agar Cetak Bersih Tanpa Header/Footer (Tanggal/URL):</span>
+                    <p class="mt-0.5 text-[11px] text-amber-800">
+                        Saat jendela print browser terbuka, buka menu <span class="font-semibold">More Settings / Pengaturan Lainnya</span>, lalu <span class="font-bold underline">HILANGKAN CENTANG (Uncheck) "Headers and footers"</span>.
+                    </p>
+                </div>
+            </div>
+
+            <div id="printable-area" class="print-document">
+                <!-- Receipt page blocks rendered dynamically via JS -->
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="font-bold text-gray-800 text-base">Pengaturan Data Master Sekolah</h3>
+                <button onclick="closeSettingsModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-medium text-gray-700 mb-1">Nama Instansi / Sekolah</label>
+                    <input type="text" id="setting-sekolah" class="w-full p-2 border rounded">
+                </div>
+                <div>
+                    <label class="block font-medium text-gray-700 mb-1">Kabupaten / Tempat / Lokasi</label>
+                    <input type="text" id="setting-lokasi" class="w-full p-2 border rounded">
+                </div>
+                <div class="border-t pt-2">
+                    <label class="block font-bold text-indigo-700 mb-1">Kepala Sekolah</label>
+                    <div class="space-y-2">
+                        <input type="text" id="setting-nama-kepala" placeholder="Nama Kepala Sekolah" class="w-full p-2 border rounded">
+                        <input type="text" id="setting-nip-kepala" placeholder="NIP Kepala Sekolah" class="w-full p-2 border rounded">
+                    </div>
+                </div>
+                <div class="border-t pt-2">
+                    <label class="block font-bold text-indigo-700 mb-1">Bendahara BOS</label>
+                    <div class="space-y-2">
+                        <input type="text" id="setting-nama-bendahara" placeholder="Nama Bendahara" class="w-full p-2 border rounded">
+                        <input type="text" id="setting-nip-bendahara" placeholder="NIP Bendahara" class="w-full p-2 border rounded">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 border-t pt-3">
+                <button onclick="closeSettingsModal()" class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs">Batal</button>
+                <button onclick="saveSettings()" class="px-4 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold">Simpan Pengaturan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRINT NOTICE MODAL (FOR IFRAME / LINK PREVIEW RESTRICTIONS) -->
+    <div id="print-notice-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-amber-300">
+            <div class="flex items-center gap-3 text-amber-600">
+                <i class="fa-solid fa-print text-3xl"></i>
+                <div>
+                    <h3 class="font-bold text-gray-900 text-base">Petunjuk Mencetak Document</h3>
+                    <p class="text-xs text-gray-500">Fitur cetak langsung dari Pratinjau Link dibatasi browser</p>
+                </div>
+            </div>
+            
+            <div class="text-xs text-gray-700 space-y-2.5 bg-amber-50 p-3.5 rounded-lg border border-amber-200">
+                <p class="font-semibold text-gray-900">Untuk mencetak hasil kwitansi ini, Anda bisa menggunakan 2 cara mudah:</p>
+                <ol class="list-decimal list-inside space-y-1.5 pl-1">
+                    <li><span class="font-bold">Buka File Download:</span> Unduh/Download file aplikasi ini, lalu buka file <span class="font-bold text-indigo-700">index.html</span> tersebut di browser (Chrome/Edge/Firefox). Semua tombol cetak akan berfungsi langsung!</li>
+                    <li><span class="font-bold">Pintasan Keyboard:</span> Tekan tombol <kbd class="px-1.5 py-0.5 bg-white border rounded shadow-sm font-mono font-bold">Ctrl</kbd> + <kbd class="px-1.5 py-0.5 bg-white border rounded shadow-sm font-mono font-bold">P</kbd> pada keyboard Anda saat ini.</li>
+                </ol>
+            </div>
+
+            <div class="flex justify-end pt-2">
+                <button onclick="closePrintNoticeModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs shadow transition">
+                    Saya Mengerti
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Default School Master Profile
+        let schoolProfile = {
+            sekolah: "SDN 07 Sitapung",
+            lokasi: "Sitapung",
+            namaKepala: "Dra. ARNELIS",
+            nipKepala: "19680526 198802 2 001",
+            namaBendahara: "RIKA FITRIANI, S.Pd.SD",
+            nipBendahara: "19810129 200901 2002"
+        };
+
+        let previewMode = 'single'; // 'single' or 'all'
+
+        // Sample Data initialized from provided PDF
+        let receiptsHistory = [
+            {
+                id: "rec-1",
+                no: "",
+                kodeAkun: "",
+                tanggal: "04 Juni 2026",
+                folio: "11",
+                terimaDari: "BENDAHARA BOS SDN 07 Sitapung",
+                uraian: "Pembayaran Honorarium Pelatih Extrakurikuler Bidang Pencak Silat Mei 2026",
+                namaTerang: "Rida Malinda",
+                alamatTerang: "",
+                tampilkanDaftar: true,
+                items: [
+                    { nama: "Rida Malinda", vol: 2, satuanHarga: 100000 }
+                ]
+            },
+            {
+                id: "rec-2",
+                no: "",
+                kodeAkun: "",
+                tanggal: "20 Juni 2026",
+                folio: "11",
+                terimaDari: "BENDAHARA BOS SDN 07 Sitapung",
+                uraian: "Pembayaran Honorarium Ekstrakurikuler Renang Mei dan Juni 2026",
+                namaTerang: "Zainuddin Anwar",
+                alamatTerang: "",
+                tampilkanDaftar: true,
+                items: [
+                    { nama: "Zainuddin Anwar", vol: 6, satuanHarga: 100000 }
+                ]
+            }
+        ];
+
+        let activeReceiptId = "rec-1";
+
+        function dateToIndonesian(dateStr) {
+            if (!dateStr) return "";
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                const year = parts[0];
+                const monthIdx = parseInt(parts[1], 10) - 1;
+                const day = String(parseInt(parts[2], 10)).padStart(2, '0');
+                const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+                if (monthIdx >= 0 && monthIdx < 12) {
+                    return `${day} ${months[monthIdx]} ${year}`;
+                }
+            }
+            return dateStr;
+        }
+
+        function indonesianToIsoDate(indoDateStr) {
+            if (!indoDateStr) return "";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(indoDateStr)) return indoDateStr;
+            
+            const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+            const parts = indoDateStr.trim().split(/\s+/);
+            if (parts.length >= 3) {
+                const day = String(parseInt(parts[0], 10)).padStart(2, '0');
+                const monthName = parts[1];
+                const year = parts[2];
+                const monthIdx = months.findIndex(m => m.toLowerCase() === monthName.toLowerCase());
+                if (monthIdx !== -1) {
+                    const month = String(monthIdx + 1).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            }
+            return "";
+        }
+
+        function terbilang(angka) {
+            angka = Math.floor(Math.abs(angka));
+            if (angka === 0) return "";
+            const huruf = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+            let temp = "";
+            if (angka < 12) {
+                temp = huruf[angka];
+            } else if (angka < 20) {
+                temp = terbilang(angka - 10) + " Belas";
+            } else if (angka < 100) {
+                temp = terbilang(Math.floor(angka / 10)) + " Puluh " + terbilang(angka % 10);
+            } else if (angka < 200) {
+                temp = "Seratus " + terbilang(angka - 100);
+            } else if (angka < 1000) {
+                temp = terbilang(Math.floor(angka / 100)) + " Ratus " + terbilang(angka % 100);
+            } else if (angka < 2000) {
+                temp = "Seribu " + terbilang(angka - 1000);
+            } else if (angka < 1000000) {
+                temp = terbilang(Math.floor(angka / 1000)) + " Ribu " + terbilang(angka % 1000);
+            } else if (angka < 1000000000) {
+                temp = terbilang(Math.floor(angka / 1000000)) + " Juta " + terbilang(angka % 1000000);
+            } else if (angka < 1000000000000) {
+                temp = terbilang(Math.floor(angka / 1000000000)) + " Milyar " + terbilang(angka % 1000000000);
+            }
+            return temp.replace(/\s+/g, ' ').trim();
+        }
+
+        function toTerbilangRupiah(num) {
+            if (!num || isNaN(num) || num === 0) return "Nol Rupiah";
+            let result = terbilang(num);
+            return result.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') + " Rupiah";
+        }
+
+        function formatRupiah(angka) {
+            return new Intl.NumberFormat('id-ID').format(angka || 0);
+        }
+
+        function populateYearOptions() {
+            const select = document.getElementById('year-filter');
+            if (!select) return;
+
+            const currentSelected = select.value;
+            const yearsSet = new Set();
+            const currentYear = new Date().getFullYear();
+
+            // Generates base options from 2020 up to 10 years into the future automatically
+            for (let y = 2020; y <= currentYear + 10; y++) {
+                yearsSet.add(String(y));
+            }
+
+            // Automatically detects any year present in transactions data
+            receiptsHistory.forEach(r => {
+                if (r.tanggalRaw) {
+                    const yr = r.tanggalRaw.split('-')[0];
+                    if (yr && !isNaN(yr)) yearsSet.add(yr);
+                } else if (r.tanggal) {
+                    const parts = r.tanggal.trim().split(' ');
+                    const yr = parts[parts.length - 1];
+                    if (yr && !isNaN(yr) && yr.length === 4) yearsSet.add(yr);
+                }
+            });
+
+            const sortedYears = Array.from(yearsSet).sort((a, b) => parseInt(a) - parseInt(b));
+
+            select.innerHTML = '<option value="all">Semua Tahun</option>';
+            sortedYears.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                select.appendChild(opt);
+            });
+
+            if (currentSelected && Array.from(select.options).some(o => o.value === currentSelected)) {
+                select.value = currentSelected;
+            } else {
+                select.value = String(currentYear > 2026 ? currentYear : 2026);
+            }
+        }
+
+        async function api(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+            });
+            if (!response.ok) {
+                const message = await response.json().catch(() => ({}));
+                throw new Error(message.error || 'Server tidak dapat memproses permintaan.');
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-4 right-4 ${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-xl transition-all z-50 flex items-center gap-2`;
+            toast.innerHTML = `<i class="fa-solid ${isError ? 'fa-circle-exclamation' : 'fa-circle-check'} text-sm"></i> ${message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        window.onload = async function() {
+            try {
+                const [profile, receipts] = await Promise.all([api('/api/profile'), api('/api/receipts')]);
+                schoolProfile = profile;
+                // Data contoh lama hanya digunakan saat database belum memiliki transaksi.
+                if (receipts.length > 0) receiptsHistory = receipts;
+            } catch (e) {
+                console.error('Backend tidak tersedia:', e);
+                showToast('Tidak dapat terhubung ke server. Pastikan backend sudah berjalan.', true);
+            }
+
+            if (receiptsHistory.length > 0) {
+                activeReceiptId = receiptsHistory[0].id;
+            }
+
+            populateYearOptions();
+            renderHistoryList();
+            loadActiveReceiptToForm();
+            renderPrintPreview();
+        };
+
+        function setPreviewMode(mode) {
+            previewMode = mode;
+            const btnSingle = document.getElementById('tab-btn-single');
+            const btnAll = document.getElementById('tab-btn-all');
+
+            if (mode === 'single') {
+                btnSingle.className = "flex-1 py-1 px-2 rounded-md bg-white shadow-sm text-indigo-700 font-bold transition";
+                btnAll.className = "flex-1 py-1 px-2 rounded-md text-gray-600 hover:text-gray-900 transition";
+            } else {
+                btnAll.className = "flex-1 py-1 px-2 rounded-md bg-white shadow-sm text-indigo-700 font-bold transition";
+                btnSingle.className = "flex-1 py-1 px-2 rounded-md text-gray-600 hover:text-gray-900 transition";
+            }
+            renderPrintPreview();
+        }
+
+        function triggerPrint(mode) {
+            const previousMode = previewMode;
+            previewMode = mode;
+            renderPrintPreview();
+            
+            setTimeout(() => {
+                let printSuccess = false;
+                try {
+                    // Try launching native print dialog
+                    window.print();
+                    printSuccess = true;
+                } catch (err) {
+                    console.warn("Print blocked by browser iframe restriction:", err);
+                    showPrintNoticeModal();
+                }
+
+                if (mode !== previousMode) {
+                    previewMode = previousMode;
+                    renderPrintPreview();
+                }
+            }, 100);
+        }
+
+        function showPrintNoticeModal() {
+            const modal = document.getElementById('print-notice-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        }
+
+        function closePrintNoticeModal() {
+            const modal = document.getElementById('print-notice-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        function getFilteredReceipts() {
+            const yearFilter = document.getElementById('year-filter')?.value || 'all';
+            const monthFilter = document.getElementById('month-filter')?.value || 'all';
+
+            return receiptsHistory.filter(rec => {
+                let matchYear = true;
+                let matchMonth = true;
+
+                if (yearFilter !== 'all') {
+                    const yearStr = String(yearFilter);
+                    const inTanggal = rec.tanggal && rec.tanggal.includes(yearStr);
+                    const inRaw = rec.tanggalRaw && rec.tanggalRaw.startsWith(yearStr);
+                    matchYear = inTanggal || inRaw;
+                }
+
+                if (monthFilter !== 'all') {
+                    matchMonth = rec.tanggal && rec.tanggal.toLowerCase().includes(monthFilter.toLowerCase());
+                }
+
+                return matchYear && matchMonth;
+            });
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('history-list');
+            const countEl = document.getElementById('receipt-count');
+            const filteredReceipts = getFilteredReceipts();
+
+            if (countEl) countEl.innerText = `${filteredReceipts.length} Data`;
+
+            container.innerHTML = '';
+
+            if (filteredReceipts.length === 0) {
+                container.innerHTML = '<div class="text-center text-xs text-gray-400 py-4 italic">Tidak ada transaksi untuk bulan ini</div>';
+                return;
+            }
+
+            // Jika transaksi aktif tidak berada di bulan terpilih, pilih transaksi pertama pada bulan tersebut
+            const exists = filteredReceipts.some(r => r.id === activeReceiptId);
+            if (!exists && filteredReceipts.length > 0) {
+                activeReceiptId = filteredReceipts[0].id;
+                loadActiveReceiptToForm();
+            }
+
+            filteredReceipts.forEach((rec) => {
+                const totalAmount = rec.items ? rec.items.reduce((sum, item) => sum + (item.vol * item.satuanHarga), 0) : 0;
+                const isActive = rec.id === activeReceiptId;
+                
+                const itemEl = document.createElement('div');
+                itemEl.className = `p-2.5 rounded-lg border text-xs cursor-pointer transition flex justify-between items-center ${
+                    isActive ? 'bg-indigo-50 border-indigo-400 font-semibold' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                }`;
+                itemEl.onclick = () => selectReceipt(rec.id);
+                
+                itemEl.innerHTML = `
+                    <div class="truncate pr-2">
+                        <div class="text-gray-900 font-medium truncate">${rec.uraian || 'Kwitansi Tanpa Uraian'}</div>
+                        <div class="text-[10px] text-gray-500">${rec.tanggal} • ${rec.namaTerang || 'Penerima'}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-indigo-700 font-bold">Rp ${formatRupiah(totalAmount)}</span>
+                    </div>
+                `;
+                container.appendChild(itemEl);
+            });
+        }
+
+        async function saveCurrentReceipt() {
+            const rec = getCurrentReceipt();
+            if (!rec) return;
+            try {
+                const saved = await api(`/api/receipts/${encodeURIComponent(rec.id)}`, { method: 'PUT', body: JSON.stringify(rec) });
+                Object.assign(rec, saved);
+                renderHistoryList();
+                showToast('Data kwitansi berhasil disimpan ke MySQL.');
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        function selectReceipt(id) {
+            activeReceiptId = id;
+            if (previewMode === 'single') {
+                renderHistoryList();
+            }
+            loadActiveReceiptToForm();
+            renderPrintPreview();
+        }
+
+        function getCurrentReceipt() {
+            return receiptsHistory.find(r => r.id === activeReceiptId);
+        }
+
+        function loadActiveReceiptToForm() {
+            const rec = getCurrentReceipt();
+            if (!rec) return;
+
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val || '';
+            };
+
+            setVal('input-no', rec.no);
+            setVal('input-kode-akun', rec.kodeAkun);
+            
+            // Format ISO YYYY-MM-DD for native HTML5 date input
+            const isoDate = rec.tanggalRaw || indonesianToIsoDate(rec.tanggal);
+            setVal('input-tanggal', isoDate);
+
+            setVal('input-folio', rec.folio);
+            setVal('input-terima-dari', rec.terimaDari || `BENDAHARA BOS ${schoolProfile.sekolah}`);
+            setVal('input-uraian', rec.uraian);
+            setVal('input-nama-terang', rec.namaTerang);
+            setVal('input-alamat-terang', rec.alamatTerang);
+
+            const elDaftar = document.getElementById('input-tampilkan-daftar');
+            if (elDaftar) elDaftar.checked = rec.tampilkanDaftar !== false;
+
+            renderRecipientInputs(rec.items || []);
+        }
+
+        function renderRecipientInputs(items) {
+            const container = document.getElementById('recipient-input-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            items.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = "flex gap-2 items-center bg-gray-50 p-2 rounded border border-gray-200";
+                row.innerHTML = `
+                    <input type="text" placeholder="Nama" value="${item.nama || ''}" oninput="updateItem(${idx}, 'nama', this.value)" class="flex-1 p-1.5 border rounded text-xs">
+                    <input type="number" min="1" placeholder="Vol" value="${item.vol || 1}" oninput="updateItem(${idx}, 'vol', this.value)" class="w-12 p-1.5 border rounded text-xs text-center">
+                    <input type="number" placeholder="Harga Satuan (Rp)" value="${item.satuanHarga || 0}" oninput="updateItem(${idx}, 'satuanHarga', this.value)" class="w-28 p-1.5 border rounded text-xs">
+                    ${items.length > 1 ? `<button type="button" onclick="removeRecipientRow(${idx})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-circle-minus"></i></button>` : ''}
+                `;
+                container.appendChild(row);
+            });
+
+            calculateAndDisplayTotal();
+        }
+
+        function addRecipientRow() {
+            const rec = getCurrentReceipt();
+            if (rec) {
+                if (!rec.items) rec.items = [];
+                rec.items.push({ nama: "", vol: 1, satuanHarga: 100000 });
+                renderRecipientInputs(rec.items);
+                renderPrintPreview();
+            }
+        }
+
+        function removeRecipientRow(idx) {
+            const rec = getCurrentReceipt();
+            if (rec && rec.items && rec.items.length > 1) {
+                rec.items.splice(idx, 1);
+                renderRecipientInputs(rec.items);
+                renderPrintPreview();
+            }
+        }
+
+        function updateItem(idx, key, value) {
+            const rec = getCurrentReceipt();
+            if (!rec || !rec.items || !rec.items[idx]) return;
+
+            if (key === 'vol' || key === 'satuanHarga') {
+                rec.items[idx][key] = parseFloat(value) || 0;
+            } else {
+                rec.items[idx][key] = value;
+                if (idx === 0) {
+                    rec.namaTerang = value;
+                    const elNama = document.getElementById('input-nama-terang');
+                    if (elNama) elNama.value = value;
+                }
+            }
+
+            calculateAndDisplayTotal();
+            renderPrintPreview();
+        }
+
+        function calculateAndDisplayTotal() {
+            const rec = getCurrentReceipt();
+            if (!rec || !rec.items) return;
+
+            const total = rec.items.reduce((sum, item) => sum + ((item.vol || 0) * (item.satuanHarga || 0)), 0);
+            const terbilangText = toTerbilangRupiah(total);
+
+            const displayTotal = document.getElementById('form-total-display');
+            const displayTerbilang = document.getElementById('form-terbilang-display');
+
+            if (displayTotal) displayTotal.innerText = `Rp ${formatRupiah(total)}`;
+            if (displayTerbilang) displayTerbilang.innerText = terbilangText;
+        }
+
+        function updateData() {
+            const rec = getCurrentReceipt();
+            if (!rec) return;
+
+            const getVal = (id) => {
+                const el = document.getElementById(id);
+                return el ? el.value : '';
+            };
+
+            rec.no = getVal('input-no');
+            rec.kodeAkun = getVal('input-kode-akun');
+            
+            // Convert selected date picker value (YYYY-MM-DD) to Indonesian formatted date
+            const rawDate = getVal('input-tanggal');
+            if (rawDate) {
+                rec.tanggalRaw = rawDate;
+                rec.tanggal = dateToIndonesian(rawDate);
+            }
+
+            rec.folio = getVal('input-folio');
+            rec.terimaDari = getVal('input-terima-dari');
+            rec.uraian = getVal('input-uraian');
+            rec.namaTerang = getVal('input-nama-terang');
+            rec.alamatTerang = getVal('input-alamat-terang');
+
+            const elDaftar = document.getElementById('input-tampilkan-daftar');
+            if (elDaftar) rec.tampilkanDaftar = elDaftar.checked;
+
+            populateYearOptions();
+            renderPrintPreview();
+        }
+
+        function getFormattedCurrentDateObj() {
+            const d = new Date();
+            const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+            
+            const yearFilter = document.getElementById('year-filter')?.value;
+            const monthFilter = document.getElementById('month-filter')?.value;
+
+            let year = d.getFullYear();
+            if (yearFilter && yearFilter !== 'all') {
+                year = parseInt(yearFilter, 10);
+            }
+
+            let targetMonthIdx = d.getMonth();
+            if (monthFilter && monthFilter !== 'all') {
+                const foundIdx = months.findIndex(m => m.toLowerCase() === monthFilter.toLowerCase());
+                if (foundIdx !== -1) {
+                    targetMonthIdx = foundIdx;
+                }
+            } else {
+                // If filter is 'Semua Bulan', follow the month of the currently active receipt
+                const activeRec = getCurrentReceipt();
+                if (activeRec && activeRec.tanggal) {
+                    const foundIdx = months.findIndex(m => activeRec.tanggal.toLowerCase().includes(m.toLowerCase()));
+                    if (foundIdx !== -1) {
+                        targetMonthIdx = foundIdx;
+                    }
+                }
+            }
+
+            const day = String(d.getDate()).padStart(2, '0');
+            const monthStr = String(targetMonthIdx + 1).padStart(2, '0');
+            
+            return {
+                isoDate: `${year}-${monthStr}-${day}`,
+                formattedDate: `${day} ${months[targetMonthIdx]} ${year}`
+            };
+        }
+
+        async function createNewReceipt() {
+            const newId = "rec-" + Date.now();
+            const dateObj = getFormattedCurrentDateObj();
+
+            const newRec = {
+                id: newId,
+                no: "",
+                kodeAkun: "",
+                tanggalRaw: dateObj.isoDate,
+                tanggal: dateObj.formattedDate,
+                folio: "",
+                terimaDari: `BENDAHARA BOS ${schoolProfile.sekolah}`,
+                uraian: "",
+                namaTerang: "",
+                alamatTerang: "",
+                tampilkanDaftar: true,
+                items: [
+                    { nama: "", vol: 1, satuanHarga: 0 }
+                ]
+            };
+            receiptsHistory.push(newRec);
+            activeReceiptId = newId;
+            populateYearOptions();
+            renderHistoryList();
+            loadActiveReceiptToForm();
+            renderPrintPreview();
+            try {
+                await api(`/api/receipts/${encodeURIComponent(newRec.id)}`, { method: 'PUT', body: JSON.stringify(newRec) });
+                showToast('Kwitansi baru dibuat.');
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function deleteCurrentReceipt() {
+            if (receiptsHistory.length <= 1) return;
+            const deletedId = activeReceiptId;
+            try {
+                await api(`/api/receipts/${encodeURIComponent(deletedId)}`, { method: 'DELETE' });
+            } catch (e) {
+                showToast(e.message, true);
+                return;
+            }
+            receiptsHistory = receiptsHistory.filter(r => r.id !== activeReceiptId);
+            activeReceiptId = receiptsHistory[0].id;
+            renderHistoryList();
+            loadActiveReceiptToForm();
+            renderPrintPreview();
+            showToast('Kwitansi dihapus dari MySQL.');
+        }
+
+        function generateSingleReceiptHTML(rec) {
+            const total = rec.items ? rec.items.reduce((sum, item) => sum + ((item.vol || 0) * (item.satuanHarga || 0)), 0) : 0;
+            const terbilangText = toTerbilangRupiah(total);
+            const showDaftar = rec.tampilkanDaftar !== false;
+
+            let tableRowsHTML = '';
+            if (rec.items && Array.isArray(rec.items)) {
+                rec.items.forEach((item, index) => {
+                    const rowTotal = (item.vol || 0) * (item.satuanHarga || 0);
+                    tableRowsHTML += `
+                        <tr>
+                            <td class="text-center">${index + 1}</td>
+                            <td>${item.nama || ''}</td>
+                            <td class="text-center">${item.vol || 0}</td>
+                            <td class="text-left"><div class="flex justify-between"><span>Rp</span><span>${formatRupiah(item.satuanHarga)}</span></div></td>
+                            <td class="text-left font-bold"><div class="flex justify-between"><span>Rp</span><span>${formatRupiah(rowTotal)}</span></div></td>
+                            <td class="text-left pl-2">${index + 1}.</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            return `
+                <div class="receipt-page-block">
+                    <!-- PART 1: KWITANSI HEADER (DIBERI BINGKAI LENGKAP) -->
+                    <div class="border-2 border-black p-3 ${showDaftar ? 'mb-4' : ''}">
+                        <div class="flex justify-between items-start text-xs mb-1">
+                            <div>
+                                <span class="font-bold">No: </span><span class="min-w-[100px] inline-block border-b border-dotted border-gray-400">${rec.no || ''}</span>
+                            </div>
+                            <div>
+                                <span class="font-bold">Kode Akun: </span><span class="min-w-[120px] inline-block border-b border-dotted border-gray-400">${rec.kodeAkun || ''}</span>
+                            </div>
+                        </div>
+
+                        <div class="text-center my-2">
+                            <h2 class="text-xl font-bold tracking-widest underline uppercase">KWITANSI</h2>
+                        </div>
+
+                        <!-- Main Content Fields -->
+                        <div class="space-y-1.5 text-xs mb-3">
+                            <div class="flex items-center">
+                                <span class="w-36 font-bold shrink-0">Sudah terima dari</span>
+                                <span class="w-4 shrink-0 text-center">:</span>
+                                <span class="font-bold flex-1">${rec.terimaDari || `BENDAHARA BOS ${schoolProfile.sekolah}`}</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="w-36 font-bold shrink-0">Uang Sejumlah</span>
+                                <span class="w-4 shrink-0 text-center">:</span>
+                                <div class="flex-1 flex items-center gap-2">
+                                    <div class="border-box px-3 py-0.5 font-bold text-sm bg-gray-50 flex items-center gap-1 shrink-0">
+                                        <span>Rp</span>
+                                        <span>${formatRupiah(total)}</span>
+                                    </div>
+                                    <div class="border-box px-3 py-0.5 font-bold italic capitalize leading-tight text-xs bg-gray-50 flex-1">
+                                        <span>${terbilangText}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-start">
+                                <span class="w-36 font-bold shrink-0">sebab dari</span>
+                                <span class="w-4 shrink-0 text-center">:</span>
+                                <div class="flex-1">
+                                    <span>${rec.uraian || ''}</span>
+                                    ${showDaftar ? '<div class="mt-0.5 text-[11px]">Sebagaimana daftar terlampir</div>' : ''}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Admin Box & Signatures -->
+                        <div class="grid grid-cols-12 gap-2 text-xs mt-3 mb-1">
+                            <!-- Left Admin Box -->
+                            <div class="col-span-4 border-box p-1.5 text-[10px] leading-tight self-start space-y-1">
+                                <div class="flex items-center pb-1 border-b border-black">
+                                    <div class="w-28 shrink-0">
+                                        <div>Diterima</div>
+                                        <div>Dibayar</div>
+                                    </div>
+                                    <span class="mr-1.5">:</span>
+                                    <div></div>
+                                </div>
+                                <div class="flex items-center py-0.5 border-b border-black">
+                                    <span class="w-28 shrink-0">Dibukukan tgl</span>
+                                    <span class="mr-1.5">:</span>
+                                    <div></div>
+                                </div>
+                                <div class="flex items-center py-0.5 border-b border-black font-normal">
+                                    <span class="w-28 shrink-0">No. Folio Buku Kas</span>
+                                    <span class="mr-1.5">:</span>
+                                    <span>${rec.folio || ''}</span>
+                                </div>
+                                <div class="py-1 border-b border-black text-[9px] italic leading-tight text-center">
+                                    Barang-barang yang dibeli ini telah diterima dalam keadaan baik dan dibukukan sebagai barang inventaris / stock dalam daftar inventaris / stock
+                                </div>
+                                <div class="pt-0.5 space-y-0.5 font-normal">
+                                    <div class="flex items-center">
+                                        <span class="w-28 shrink-0">No</span>
+                                        <span class="mr-1.5">:</span>
+                                        <span>${rec.no || ''}</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <span class="w-28 shrink-0">Tanggal</span>
+                                        <span class="mr-1.5">:</span>
+                                        <span>${rec.tanggal || ''}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Side Signatures Grid -->
+                            <div class="col-span-8 grid grid-cols-2 gap-2">
+                                <div class="flex flex-col justify-between space-y-3">
+                                    <div class="text-center flex flex-col justify-between h-28">
+                                        <div>
+                                            <div>Setuju dibayar</div>
+                                            <div>Kepala ${schoolProfile.sekolah}</div>
+                                        </div>
+                                        <div>
+                                            <div class="font-bold underline">${schoolProfile.namaKepala || ''}</div>
+                                            <div>NIP. <span>${schoolProfile.nipKepala || ''}</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="text-center flex flex-col justify-between h-28">
+                                        <div>
+                                            <div>Lunas Bayar tgl :</div>
+                                            <div class="font-semibold">Pemegang Kas</div>
+                                        </div>
+                                        <div>
+                                            <div class="font-bold underline">${schoolProfile.namaBendahara || ''}</div>
+                                            <div>NIP. <span>${schoolProfile.nipBendahara || ''}</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-col justify-between space-y-3">
+                                    <div class="flex flex-col justify-between h-28">
+                                        <div class="text-center">
+                                            <div><span>${schoolProfile.lokasi || ''}</span>, <span>${rec.tanggal || ''}</span></div>
+                                            <div class="font-semibold">Yang Terima</div>
+                                        </div>
+                                        <div class="text-left pl-1">
+                                            <div>Nama Terang : <span class="font-bold">${rec.namaTerang || ''}</span></div>
+                                            <div>Alamat Terang : <span>${rec.alamatTerang || ''}</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="h-28"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${showDaftar ? `
+                    <!-- PART 2: DAFTAR PEMBAYARAN -->
+                    <div class="pt-2">
+                        <div class="text-center mb-2">
+                            <h3 class="font-bold text-sm uppercase tracking-wider">DAFTAR PEMBAYARAN</h3>
+                        </div>
+                        <table class="excel-table w-full">
+                            <thead>
+                                <tr class="text-center font-bold">
+                                    <th class="w-8">NO</th>
+                                    <th>Nama</th>
+                                    <th class="w-12">Vol</th>
+                                    <th class="w-28">Satuan</th>
+                                    <th class="w-32">Jumlah Terima</th>
+                                    <th class="w-24">Tanda tangan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRowsHTML}
+                            </tbody>
+                            <tfoot>
+                                <tr class="font-bold">
+                                    <td colspan="4" class="text-right pr-2">Jumlah Total :</td>
+                                    <td class="text-right pr-2">Rp ${formatRupiah(total)}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <!-- Signatures for Daftar Pembayaran -->
+                        <div class="grid grid-cols-2 text-center text-xs mt-6">
+                            <div class="flex flex-col justify-between h-32">
+                                <div>
+                                    <div>Mengetahui</div>
+                                    <div>Kepala ${schoolProfile.sekolah}</div>
+                                </div>
+                                <div>
+                                    <div class="font-bold underline">${schoolProfile.namaKepala || ''}</div>
+                                    <div>NIP. <span>${schoolProfile.nipKepala || ''}</span></div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col justify-between h-32">
+                                <div>
+                                    <div><span>${schoolProfile.lokasi || ''}</span>, <span>${rec.tanggal || ''}</span></div>
+                                    <div class="font-semibold">Bendahara BOS</div>
+                                </div>
+                                <div>
+                                    <div class="font-bold underline">${schoolProfile.namaBendahara || ''}</div>
+                                    <div>NIP. <span>${schoolProfile.nipBendahara || ''}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderPrintPreview() {
+            const printArea = document.getElementById('printable-area');
+            if (!printArea) return;
+
+            if (previewMode === 'single') {
+                const rec = getCurrentReceipt();
+                if (rec) {
+                    printArea.innerHTML = generateSingleReceiptHTML(rec);
+                }
+            } else {
+                // Render HANYA transaksi yang sesuai dengan Filter Bulan terpilih
+                const filtered = getFilteredReceipts();
+                let allHTML = '';
+                if (filtered.length === 0) {
+                    allHTML = '<div class="text-center text-gray-500 py-10 font-sans text-xs">Tidak ada data transaksi untuk bulan ini.</div>';
+                } else {
+                    filtered.forEach((rec) => {
+                        allHTML += generateSingleReceiptHTML(rec);
+                    });
+                }
+                printArea.innerHTML = allHTML;
+            }
+        }
+
+        function openSettingsModal() {
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val || '';
+            };
+
+            setVal('setting-sekolah', schoolProfile.sekolah);
+            setVal('setting-lokasi', schoolProfile.lokasi);
+            setVal('setting-nama-kepala', schoolProfile.namaKepala);
+            setVal('setting-nip-kepala', schoolProfile.nipKepala);
+            setVal('setting-nama-bendahara', schoolProfile.namaBendahara);
+            setVal('setting-nip-bendahara', schoolProfile.nipBendahara);
+
+            const modal = document.getElementById('settings-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        }
+
+        function closeSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        async function saveSettings() {
+            const getVal = (id) => {
+                const el = document.getElementById(id);
+                return el ? el.value : '';
+            };
+
+            schoolProfile.sekolah = getVal('setting-sekolah');
+            schoolProfile.lokasi = getVal('setting-lokasi');
+            schoolProfile.namaKepala = getVal('setting-nama-kepala');
+            schoolProfile.nipKepala = getVal('setting-nip-kepala');
+            schoolProfile.namaBendahara = getVal('setting-nama-bendahara');
+            schoolProfile.nipBendahara = getVal('setting-nip-bendahara');
+
+            try {
+                schoolProfile = await api('/api/profile', { method: 'PUT', body: JSON.stringify(schoolProfile) });
+                closeSettingsModal();
+                renderPrintPreview();
+                showToast('Pengaturan sekolah berhasil disimpan ke MySQL.');
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+    </script>
+</body>
+</html>
